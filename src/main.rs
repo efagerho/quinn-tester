@@ -136,7 +136,8 @@ async fn run_server() -> Result<()> {
                         eprintln!("Connection error: {e}");
                     }
                 }
-                Err(e) => eprintln!("Incoming error: {e}"),
+                // Handshake aborted by peer before completing — ignore.
+                Err(_) => {}
             }
         });
     }
@@ -148,8 +149,12 @@ async fn handle_connection(conn: Connection) -> Result<()> {
     loop {
         let (mut send, mut recv) = match conn.accept_bi().await {
             Ok(s) => s,
-            Err(quinn::ConnectionError::ApplicationClosed(_)) => break,
-            Err(quinn::ConnectionError::LocallyClosed) => break,
+            // All normal peer-initiated or local close variants — treat as clean shutdown.
+            Err(quinn::ConnectionError::ApplicationClosed(_))
+            | Err(quinn::ConnectionError::ConnectionClosed(_))
+            | Err(quinn::ConnectionError::Reset)
+            | Err(quinn::ConnectionError::TimedOut)
+            | Err(quinn::ConnectionError::LocallyClosed) => break,
             Err(e) => return Err(e.into()),
         };
 
@@ -166,7 +171,7 @@ async fn handle_connection(conn: Connection) -> Result<()> {
 // ---------------------------------------------------------------------------
 
 fn make_endpoint() -> Result<Endpoint> {
-    let mut ep = Endpoint::client("0.0.0.0:0".parse()?)?;
+    let ep = Endpoint::client("0.0.0.0:0".parse()?)?;
     ep.set_default_client_config(ClientConfig::new(Arc::new(
         quinn_plaintext::PlaintextClientConfig,
     )));

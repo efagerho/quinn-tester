@@ -1,0 +1,12 @@
+[package]
+name = "quinn-plaintext"
+version = "0.3.0"
+edition = "2021"
+description = "Plaintext quinn cryptography (insecure)"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+bytes = "1"
+quinn-proto = "0.12"
+seahash = "4.1.0"
+tracing = "0.1"
