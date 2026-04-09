@@ -2,24 +2,28 @@
 set -euo pipefail
 
 usage() {
-    echo "Usage: $0 <conns_per_sec>"
+    echo "Usage: $0 <type> <conns_per_sec>"
     echo ""
-    echo "Runs three 60-second profiling passes against a QUIC server at the"
-    echo "given connection rate and generates flamegraphs for each:"
-    echo ""
-    echo "  oncpu.data  / oncpu.svg   — CPU profile of the server (perf)"
-    echo "  offcpu.data / offcpu.svg  — Off-CPU / blocking profile of the server (bpftrace)"
-    echo "  all.data    / all.svg     — System-wide CPU profile (perf)"
+    echo "Types:"
+    echo "  on   — On-CPU profile of the server (perf)          → oncpu.data / oncpu.svg"
+    echo "  off  — Off-CPU / blocking profile of the server (offcputime) → offcpu.data / offcpu.svg"
+    echo "  all  — System-wide CPU profile (perf)               → all.data / all.svg"
     exit 1
 }
 
-[ $# -ge 1 ] || usage
+[ $# -ge 2 ] || usage
 
-RATE=$1
+TYPE=$1
+RATE=$2
 DURATION=60
 BIN="./target/release/quinn-tester"
 SERVER_PID=""
 CHILD_PID=""
+
+case "$TYPE" in
+    on|off|all) ;;
+    *) echo "Error: unknown type '$TYPE' (expected: on, off, all)" >&2; usage ;;
+esac
 
 cleanup() {
     [ -n "$CHILD_PID" ]  && { kill -INT "$CHILD_PID" 2>/dev/null || true; wait "$CHILD_PID" 2>/dev/null || true; }
@@ -51,7 +55,7 @@ stop_server() {
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
     SERVER_PID=""
-    sleep 0.5  # allow port to be released before next run
+    sleep 0.5
 }
 
 run_client() {
@@ -96,8 +100,7 @@ folded_to_svg() {
 # ---------------------------------------------------------------------------
 
 run_oncpu() {
-    echo ""
-    echo "==> [1/3] On-CPU profile..."
+    echo "==> On-CPU profile..."
     start_server
 
     perf record -F 99 -p "$SERVER_PID" -g -o oncpu.data &
@@ -114,12 +117,9 @@ run_oncpu() {
 }
 
 run_offcpu() {
-    echo ""
-    echo "==> [2/3] Off-CPU profile (requires sudo for offcputime)..."
+    echo "==> Off-CPU profile (requires sudo for offcputime)..."
     start_server
 
-    # offcputime runs for exactly $DURATION seconds then exits on its own.
-    # -p: target PID, -U: user stacks only, -f: pre-folded output for flamegraphs.
     sudo python3 /usr/share/bcc/tools/offcputime -p "$SERVER_PID" -U -f "$DURATION" > offcpu.data &
     CHILD_PID=$!
     sleep 0.5
@@ -135,8 +135,7 @@ run_offcpu() {
 }
 
 run_all() {
-    echo ""
-    echo "==> [3/3] All-processes profile..."
+    echo "==> All-processes profile..."
     start_server
 
     perf record -F 99 -a -g -o all.data &
@@ -155,12 +154,8 @@ run_all() {
 # ---------------------------------------------------------------------------
 
 build
-run_oncpu
-run_offcpu
-run_all
-
-echo ""
-echo "==> Done."
-echo "    oncpu.data  / oncpu.svg"
-echo "    offcpu.data / offcpu.svg"
-echo "    all.data    / all.svg"
+case "$TYPE" in
+    on)  run_oncpu ;;
+    off) run_offcpu ;;
+    all) run_all ;;
+esac
