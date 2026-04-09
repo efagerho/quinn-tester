@@ -8,9 +8,13 @@ quinn = "0.12"
 quinn-plaintext = "0.3"
 tokio = { version = "1", features = ["full"] }
 anyhow = "1"
+mimalloc = "0.1"
+
+[profile.release]
+debug = true
 
 [patch.crates-io]
-quinn = { git = "https://github.com/efagerho/quinn", branch = "main" }
-quinn-proto = { git = "https://github.com/efagerho/quinn", branch = "main" }
-quinn-udp = { git = "https://github.com/efagerho/quinn", branch = "main" }
+quinn = { path = "quinn/quinn" }
+quinn-proto = { path = "quinn/quinn-proto" }
+quinn-udp = { path = "quinn/quinn-udp" }
 quinn-plaintext = { path = "quinn-plaintext" }
